@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { FaultKind, FleetSnapshot } from "./types";
+import { ClientCommand, FaultKind, FleetSnapshot, ScenarioKind } from "./types";
 
 const WS_URL = "ws://localhost:8080";
 const RECONNECT_DELAY_MS = 1500;
@@ -37,12 +37,17 @@ export function useSocket() {
     };
   }, []);
 
-  function trigger(fault: FaultKind) {
+  function send(command: ClientCommand) {
     const socket = socketRef.current;
     if (socket && socket.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify({ type: "trigger", fault }));
+      socket.send(JSON.stringify(command));
     }
   }
 
-  return { snapshot, connected, trigger };
+  const trigger = (fault: FaultKind) => send({ type: "trigger", fault });
+  const setAutoHeal = (enabled: boolean) => send({ type: "setAutoHeal", enabled });
+  const startScenario = (scenario: ScenarioKind) => send({ type: "scenario", scenario });
+  const resetFleet = () => send({ type: "reset" });
+
+  return { snapshot, connected, trigger, setAutoHeal, startScenario, resetFleet };
 }

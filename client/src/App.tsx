@@ -1,20 +1,38 @@
+import { useState } from "react";
 import "./App.css";
 import { Scene } from "./Scene";
 import { Dashboard } from "./Dashboard";
 import { useSocket } from "./useSocket";
 
 function App() {
-  const { snapshot, connected, trigger } = useSocket();
+  const { snapshot, connected, trigger, setAutoHeal, startScenario, resetFleet } = useSocket();
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
   const nodes = snapshot?.nodes ?? [];
   const events = snapshot?.events ?? [];
   const stats = snapshot?.stats ?? null;
+  const autoHeal = snapshot?.autoHeal ?? true;
+  const activeScenario = snapshot?.activeScenario ?? null;
 
   return (
     <div className="app-layout">
       <div className="scene-panel">
-        <Scene nodes={nodes} />
+        <Scene nodes={nodes} selectedId={selectedId} />
       </div>
-      <Dashboard nodes={nodes} events={events} stats={stats} connected={connected} onTrigger={trigger} />
+      <Dashboard
+        nodes={nodes}
+        events={events}
+        stats={stats}
+        autoHeal={autoHeal}
+        activeScenario={activeScenario}
+        connected={connected}
+        selectedId={selectedId}
+        onSelect={setSelectedId}
+        onTrigger={trigger}
+        onSetAutoHeal={setAutoHeal}
+        onScenario={startScenario}
+        onReset={resetFleet}
+      />
     </div>
   );
 }

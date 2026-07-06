@@ -2,8 +2,9 @@ import { WebSocketServer, WebSocket } from "ws";
 import { createFleet, tickNode, deriveStatus } from "./simulator.js";
 import { progressFaults, maybeStartAmbientFault, triggerFault } from "./faults.js";
 import { recordTick, getBroadcastHistory, computeFleetStats } from "./monitor.js";
-import { applyHealing } from "./healing.js";
+import { applyHealing, setAutoHeal, isAutoHealEnabled } from "./healing.js";
 import { predictFailureRisk } from "./predictor.js";
+import { startScenario, progressScenario, getActiveScenario, resetFleet } from "./scenarios.js";
 import { ClientCommand, FleetEvent, FleetSnapshot } from "./types.js";
 
 const PORT = 8080;
@@ -22,10 +23,13 @@ function pushEvents(events: FleetEvent[]): void {
 }
 
 function tick(): void {
+  // SENSE-THINK-ACT loop, in order: drift -> scenario/fault pressure -> derive
+  // health -> record history -> predict -> heal (acts on fresh predictions) -> derive again.
   for (const node of fleet) {
-    if (node.status !== "failed") tickNode(node);
+    if (!node.isolated) tickNode(node);
   }
 
+  pushEvents(progressScenario(fleet));
   progressFaults(fleet);
   pushEvents(maybeStartAmbientFault(fleet));
 
@@ -34,7 +38,10 @@ function tick(): void {
   recordTick(fleet);
 
   for (const node of fleet) {
-    node.failureRisk = predictFailureRisk(node);
+    const prediction = predictFailureRisk(node);
+    node.failureRisk = prediction.score;
+    node.riskLevel = prediction.level;
+    node.riskReason = prediction.reason;
   }
 
   pushEvents(applyHealing(fleet));
@@ -54,6 +61,8 @@ function broadcast(): void {
     events: eventLog.slice(-20),
     history: getBroadcastHistory(fleet),
     stats: computeFleetStats(fleet),
+    autoHeal: isAutoHealEnabled(),
+    activeScenario: getActiveScenario(),
   };
   const payload = JSON.stringify(snapshot);
   for (const client of wss.clients) {
@@ -63,15 +72,29 @@ function broadcast(): void {
   }
 }
 
+function handleCommand(command: ClientCommand): void {
+  switch (command.type) {
+    case "trigger":
+      pushEvents(triggerFault(fleet, command.fault));
+      break;
+    case "setAutoHeal":
+      pushEvents(setAutoHeal(command.enabled));
+      break;
+    case "scenario":
+      pushEvents(startScenario(fleet, command.scenario));
+      break;
+    case "reset":
+      pushEvents(resetFleet(fleet));
+      break;
+  }
+  broadcast();
+}
+
 wss.on("connection", (socket) => {
   console.log("Client connected");
   socket.on("message", (raw) => {
     try {
-      const command = JSON.parse(raw.toString()) as ClientCommand;
-      if (command.type === "trigger") {
-        pushEvents(triggerFault(fleet, command.fault));
-        broadcast();
-      }
+      handleCommand(JSON.parse(raw.toString()) as ClientCommand);
     } catch (err) {
       console.error("Bad client message", err);
     }

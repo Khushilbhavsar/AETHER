@@ -1,5 +1,11 @@
 export type NodeStatus = "healthy" | "degraded" | "failed";
 
+export type FaultKind = "radiationSpike" | "overheating" | "packetLoss" | "crash";
+
+export type ScenarioKind = "solarStorm" | "thermalOverload" | "networkCollapse" | "cascadingFailure";
+
+export type RiskLevel = "low" | "medium" | "high";
+
 export interface NodeState {
   id: string;
   temperature: number;
@@ -10,10 +16,13 @@ export interface NodeState {
   health: number;
   status: NodeStatus;
   workload: number;
+  isolated: boolean;
   failureRisk: number;
+  riskLevel: RiskLevel;
+  riskReason: string;
 }
 
-export type EventKind = "fault" | "heal" | "prediction" | "info";
+export type EventKind = "fault" | "heal" | "prediction" | "scenario" | "info";
 
 export interface FleetEvent {
   id: string;
@@ -49,6 +58,12 @@ export interface FleetSnapshot {
   events: FleetEvent[];
   history: Record<string, HistoryPoint[]>;
   stats: FleetStats;
+  autoHeal: boolean;
+  activeScenario: ScenarioKind | null;
 }
 
-export type FaultKind = "radiationSpike" | "overheating" | "packetLoss" | "crash";
+export type ClientCommand =
+  | { type: "trigger"; fault: FaultKind }
+  | { type: "setAutoHeal"; enabled: boolean }
+  | { type: "scenario"; scenario: ScenarioKind }
+  | { type: "reset" };

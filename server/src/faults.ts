@@ -54,8 +54,10 @@ function applyFaultTick(node: NodeState, kind: FaultKind): void {
       node.networkHealth = clamp(node.networkHealth - 12, 0, 100);
       break;
     case "crash":
-      node.memoryHealth = clamp(node.memoryHealth - 25, 0, 100);
-      node.networkHealth = clamp(node.networkHealth - 25, 0, 100);
+      // Severe by design: two ticks of this must drive health below the failure line.
+      node.memoryHealth = clamp(node.memoryHealth - 40, 0, 100);
+      node.networkHealth = clamp(node.networkHealth - 40, 0, 100);
+      node.radiation = clamp(node.radiation + 0.2, 0, 1);
       node.temperature = clamp(node.temperature + 15, 20, 140);
       break;
   }
@@ -79,7 +81,9 @@ export function progressFaults(fleet: NodeState[]): void {
 }
 
 function pickEligibleNode(fleet: NodeState[]): NodeState | undefined {
-  const candidates = fleet.filter((n) => n.status !== "failed" && !activeFaults.has(n.id));
+  const candidates = fleet.filter(
+    (n) => n.status !== "failed" && !n.isolated && !activeFaults.has(n.id)
+  );
   if (candidates.length === 0) return undefined;
   return candidates[Math.floor(Math.random() * candidates.length)];
 }
@@ -109,4 +113,9 @@ export function maybeStartAmbientFault(fleet: NodeState[]): FleetEvent[] {
 /** Manual on-demand trigger (e.g. a demo button) — targets a random eligible node. */
 export function triggerFault(fleet: NodeState[], kind: FaultKind): FleetEvent[] {
   return startFault(fleet, kind);
+}
+
+/** Cancels all in-progress faults (used by fleet reset). */
+export function clearFaults(): void {
+  activeFaults.clear();
 }

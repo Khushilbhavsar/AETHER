@@ -29,6 +29,11 @@ export function getHistory(nodeId: string): HistoryPoint[] {
   return history.get(nodeId) ?? [];
 }
 
+/** Wipes all stored history (used by fleet reset so predictions rebuild a fresh baseline). */
+export function clearHistory(): void {
+  history.clear();
+}
+
 /** Trimmed history for every node, suitable for broadcasting over WebSocket each tick. */
 export function getBroadcastHistory(fleet: NodeState[]): Record<string, HistoryPoint[]> {
   const out: Record<string, HistoryPoint[]> = {};

@@ -1,7 +1,14 @@
-import { NodeState, HistoryPoint } from "./types.js";
+import { NodeState, HistoryPoint, RiskLevel } from "./types.js";
 import { getHistory } from "./monitor.js";
 
 const MIN_HISTORY = 8;
+const TREND_WINDOW = 8;
+
+export interface Prediction {
+  score: number; // 0-1
+  level: RiskLevel;
+  reason: string;
+}
 
 function mean(values: number[]): number {
   return values.reduce((sum, v) => sum + v, 0) / values.length;
@@ -21,16 +28,40 @@ function deviationScore(points: HistoryPoint[], pick: (p: HistoryPoint) => numbe
   return Math.abs(latest - avg) / sd;
 }
 
+/** Recent-vs-earlier average difference over the trend window: positive = rising. */
+function trend(points: HistoryPoint[], pick: (p: HistoryPoint) => number): number {
+  const window = points.slice(-TREND_WINDOW);
+  if (window.length < 4) return 0;
+  const half = Math.floor(window.length / 2);
+  const earlier = mean(window.slice(0, half).map(pick));
+  const recent = mean(window.slice(half).map(pick));
+  return recent - earlier;
+}
+
 /**
- * Lightweight statistical anomaly score: how far the node's latest metrics deviate
- * from its own recent history, squashed into a 0-1 failure-risk probability.
+ * Lightweight, explainable failure prediction: adverse trends over the node's
+ * recent history plus sharp deviation from its own baseline, combined into a
+ * 0-1 risk score with a human-readable reason.
  */
-export function predictFailureRisk(node: NodeState): number {
-  if (node.status === "failed") return 1;
+export function predictFailureRisk(node: NodeState): Prediction {
+  if (node.status === "failed") {
+    return { score: 1, level: "high", reason: "node has failed" };
+  }
 
   const points = getHistory(node.id);
-  if (points.length < MIN_HISTORY) return 0;
+  if (points.length < MIN_HISTORY) {
+    return { score: 0, level: "low", reason: "collecting baseline data" };
+  }
 
+  const factors: string[] = [];
+
+  // Adverse trends over the last N ticks.
+  if (trend(points, (p) => p.radiation) > 0.06) factors.push("radiation trending up");
+  if (trend(points, (p) => p.health) < -4) factors.push("health falling");
+  if (trend(points, (p) => p.temperature) > 4) factors.push("temperature climbing");
+  if (trend(points, (p) => p.networkHealth) < -5) factors.push("network degrading");
+
+  // Sharp deviation from the node's own recent baseline.
   const zScores = [
     deviationScore(points, (p) => p.temperature),
     deviationScore(points, (p) => p.radiation),
@@ -38,16 +69,29 @@ export function predictFailureRisk(node: NodeState): number {
     deviationScore(points, (p) => 100 - p.networkHealth),
   ];
   const maxZ = Math.max(...zScores);
+  if (maxZ > 2.5) factors.push("sharp deviation from baseline");
 
-  // Squash z-score into 0-1: z=0 -> 0, z=3 -> ~0.63, z=6 -> ~0.86.
-  let risk = 1 - Math.exp(-maxZ / 3);
+  // Absolute danger zones count regardless of trend, since a node already near
+  // the edge is high-risk even if it's been sitting there a while (low variance).
+  if (node.radiation > 0.8) factors.push(`radiation critical (${node.radiation.toFixed(2)})`);
+  if (node.temperature > 100) factors.push(`overheating (${node.temperature.toFixed(0)}°)`);
+  if (node.memoryHealth < 40) factors.push("memory degraded");
 
-  // Absolute thresholds nudge risk up regardless of trend, since a node already
-  // near failure is high-risk even if it's been degraded for a while (low variance).
-  if (node.temperature > 100) risk = Math.max(risk, 0.6);
-  if (node.radiation > 0.8) risk = Math.max(risk, 0.7);
-  if (node.memoryHealth < 40) risk = Math.max(risk, 0.6);
-  if (node.networkHealth < 40) risk = Math.max(risk, 0.55);
+  // Squash z into 0-1 with a noise floor: ordinary drift sits around z 1-2 and
+  // shouldn't register; only genuine departures (z > ~1.5) start scoring.
+  let score = 1 - Math.exp(-Math.max(0, maxZ - 1.5) / 2.5);
+  score += factors.length * 0.13;
+  if (node.radiation > 0.8) score = Math.max(score, 0.72);
+  if (node.temperature > 100) score = Math.max(score, 0.6);
+  if (node.health < 45) score = Math.max(score, 0.6);
+  score = Math.min(1, score);
 
-  return Math.min(1, risk);
+  const level: RiskLevel = score >= 0.7 ? "high" : score >= 0.4 ? "medium" : "low";
+
+  const reason =
+    factors.length > 0
+      ? `${factors.join(" + ")} over last ${TREND_WINDOW} ticks`
+      : "metrics stable";
+
+  return { score, level, reason };
 }
