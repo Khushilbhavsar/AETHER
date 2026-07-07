@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ResponsiveContainer,
   LineChart,
@@ -9,7 +9,7 @@ import {
   Tooltip,
   Legend,
 } from "recharts";
-import { FaultKind, FleetEvent, FleetStats, NodeState, ScenarioKind } from "./types";
+import { FaultKind, FleetEvent, FleetStats, HistoryPoint, NodeState, ScenarioKind } from "./types";
 
 const STATUS_COLOR: Record<NodeState["status"], string> = {
   healthy: "#22c55e",
@@ -46,7 +46,7 @@ const SCENARIO_LABEL: Record<ScenarioKind, string> = {
 interface TrendPoint {
   time: string;
   avgHealth: number;
-  avgRisk: number;
+  avgRisk: number | null; // null on points seeded from history (risk isn't stored there)
 }
 
 const TREND_LIMIT = 60;
@@ -55,10 +55,33 @@ function average(values: number[]): number {
   return values.reduce((sum, v) => sum + v, 0) / values.length;
 }
 
+function timeLabel(timestamp: number): string {
+  return new Date(timestamp).toLocaleTimeString(undefined, { minute: "2-digit", second: "2-digit" });
+}
+
+/** Rebuilds fleet-average health per tick from the broadcast per-node history. */
+function seedFromHistory(history: Record<string, HistoryPoint[]>): TrendPoint[] {
+  const buffers = Object.values(history).filter((b) => b.length > 0);
+  if (buffers.length === 0) return [];
+  // Align node buffers from the end — they can differ in length briefly.
+  const length = Math.min(...buffers.map((b) => b.length));
+  const points: TrendPoint[] = [];
+  for (let i = 0; i < length; i++) {
+    const slice = buffers.map((b) => b[b.length - length + i]);
+    points.push({
+      time: timeLabel(slice[0].timestamp),
+      avgHealth: Math.round(average(slice.map((p) => p.health))),
+      avgRisk: null,
+    });
+  }
+  return points;
+}
+
 export function Dashboard({
   nodes,
   events,
   stats,
+  history,
   autoHeal,
   activeScenario,
   connected,
@@ -72,6 +95,7 @@ export function Dashboard({
   nodes: NodeState[];
   events: FleetEvent[];
   stats: FleetStats | null;
+  history: Record<string, HistoryPoint[]> | null;
   autoHeal: boolean;
   activeScenario: ScenarioKind | null;
   connected: boolean;
@@ -83,19 +107,23 @@ export function Dashboard({
   onReset: () => void;
 }) {
   const [trend, setTrend] = useState<TrendPoint[]>([]);
+  const seededRef = useRef(false);
 
   useEffect(() => {
     if (nodes.length === 0 || !stats) return;
     const avgRisk = average(nodes.map((n) => n.failureRisk)) * 100;
+    // First snapshot after load: backfill the chart from broadcast history so a
+    // page refresh doesn't wipe the trend. Decided OUTSIDE the state updater —
+    // updaters must stay pure (StrictMode double-invokes them).
+    const seedPoints = !seededRef.current && history ? seedFromHistory(history) : null;
+    seededRef.current = true;
+    const point: TrendPoint = {
+      time: timeLabel(Date.now()),
+      avgHealth: Math.round(stats.avgHealth),
+      avgRisk: Math.round(avgRisk),
+    };
     setTrend((prev) => {
-      const next = [
-        ...prev,
-        {
-          time: new Date().toLocaleTimeString(undefined, { minute: "2-digit", second: "2-digit" }),
-          avgHealth: Math.round(stats.avgHealth),
-          avgRisk: Math.round(avgRisk),
-        },
-      ];
+      const next = [...(seedPoints ?? prev), point];
       return next.length > TREND_LIMIT ? next.slice(-TREND_LIMIT) : next;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -114,6 +142,10 @@ export function Dashboard({
 
       {activeScenario && (
         <div className="scenario-banner">⚠ {SCENARIO_LABEL[activeScenario].toUpperCase()} ACTIVE</div>
+      )}
+
+      {!autoHeal && (
+        <div className="healoff-banner">⚠ AUTO-HEAL DISABLED — FLEET IS UNPROTECTED</div>
       )}
 
       {stats && (

@@ -42,15 +42,85 @@ function Starfield() {
   );
 }
 
+/** Deterministic pseudo-random generator so the planet looks the same every load. */
+function mulberry32(seed: number): () => number {
+  return () => {
+    seed |= 0;
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** Procedural Earth-like texture drawn on a canvas — no external image needed. */
+function createEarthTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement("canvas");
+  canvas.width = 1024;
+  canvas.height = 512;
+  const ctx = canvas.getContext("2d")!;
+  const rand = mulberry32(42);
+
+  // Ocean
+  const ocean = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  ocean.addColorStop(0, "#123a63");
+  ocean.addColorStop(0.5, "#1d4f8f");
+  ocean.addColorStop(1, "#123a63");
+  ctx.fillStyle = ocean;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Continents: clusters of overlapping blobs in the mid-latitudes
+  const landColors = ["#2f6b3a", "#3d7a44", "#6b7f3a", "#8a7a4a"];
+  for (let c = 0; c < 9; c++) {
+    const cx = rand() * canvas.width;
+    const cy = canvas.height * (0.2 + rand() * 0.6);
+    const blobs = 14 + Math.floor(rand() * 18);
+    ctx.fillStyle = landColors[Math.floor(rand() * landColors.length)];
+    for (let b = 0; b < blobs; b++) {
+      const x = cx + (rand() - 0.5) * 190;
+      const y = cy + (rand() - 0.5) * 110;
+      const rx = 14 + rand() * 46;
+      const ry = 10 + rand() * 30;
+      ctx.beginPath();
+      ctx.ellipse((x + canvas.width) % canvas.width, y, rx, ry, rand() * Math.PI, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // Polar ice caps
+  ctx.fillStyle = "#dbe7f0";
+  ctx.fillRect(0, 0, canvas.width, 26);
+  ctx.fillRect(0, canvas.height - 26, canvas.width, 26);
+  for (let i = 0; i < 40; i++) {
+    const x = rand() * canvas.width;
+    ctx.beginPath();
+    ctx.ellipse(x, rand() < 0.5 ? 30 : canvas.height - 30, 12 + rand() * 26, 6 + rand() * 10, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Soft cloud wisps
+  ctx.fillStyle = "rgba(255, 255, 255, 0.10)";
+  for (let i = 0; i < 60; i++) {
+    ctx.beginPath();
+    ctx.ellipse(rand() * canvas.width, rand() * canvas.height, 24 + rand() * 60, 5 + rand() * 9, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
 function Earth() {
   const meshRef = useRef<THREE.Mesh>(null);
+  const texture = useMemo(() => createEarthTexture(), []);
   useFrame((_, delta) => {
     if (meshRef.current) meshRef.current.rotation.y += delta * 0.15;
   });
   return (
     <mesh ref={meshRef}>
       <sphereGeometry args={[1.5, 48, 48]} />
-      <meshStandardMaterial color="#1d4f8f" roughness={0.7} metalness={0.1} />
+      <meshStandardMaterial map={texture} roughness={0.8} metalness={0.05} />
     </mesh>
   );
 }

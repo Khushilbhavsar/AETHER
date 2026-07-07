@@ -1,7 +1,7 @@
 import { NodeState, FleetEvent, ScenarioKind } from "./types.js";
 import { makeEvent, clearFaults } from "./faults.js";
 import { baselineNode } from "./simulator.js";
-import { resetHealing } from "./healing.js";
+import { resetHealing, setAutoHeal } from "./healing.js";
 import { clearHistory } from "./monitor.js";
 
 function clamp(value: number, min: number, max: number): number {
@@ -112,5 +112,9 @@ export function resetFleet(fleet: NodeState[]): FleetEvent[] {
   for (const node of fleet) {
     Object.assign(node, baselineNode(node.id));
   }
-  return [makeEvent("info", "Fleet reset — all nodes restored to baseline")];
+  // A "clean demo restart" must also restore the safety net — otherwise a
+  // collapse demo leaves healing silently disabled for the next run.
+  const events = setAutoHeal(true);
+  events.push(makeEvent("info", "Fleet reset — all nodes restored to baseline"));
+  return events;
 }

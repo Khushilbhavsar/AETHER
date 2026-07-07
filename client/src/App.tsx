@@ -11,6 +11,7 @@ function App() {
   const nodes = snapshot?.nodes ?? [];
   const events = snapshot?.events ?? [];
   const stats = snapshot?.stats ?? null;
+  const history = snapshot?.history ?? null;
   const autoHeal = snapshot?.autoHeal ?? true;
   const activeScenario = snapshot?.activeScenario ?? null;
 
@@ -23,6 +24,7 @@ function App() {
         nodes={nodes}
         events={events}
         stats={stats}
+        history={history}
         autoHeal={autoHeal}
         activeScenario={activeScenario}
         connected={connected}
