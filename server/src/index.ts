@@ -22,7 +22,8 @@ import { predictFailureRisk } from "./predictor.js";
 import { startScenario, progressScenario, getActiveScenario, resetFleet } from "./scenarios.js";
 import { ClientCommand, FleetEvent, FleetSnapshot, RiskLevel } from "./types.js";
 
-const PORT = 8080;
+// Hosting platforms (Render, Railway, …) inject the port to bind via env.
+const PORT = Number(process.env.PORT) || 8080;
 const TICK_MS = 1000;
 const EVENT_LOG_LIMIT = 50;
 

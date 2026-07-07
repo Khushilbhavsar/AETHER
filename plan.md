@@ -1,3 +1,329 @@
+# AETHER — Prototype Build Roadmap (Free / Vibe-Coding Edition)
+
+**Autonomous Orbital Infrastructure Intelligence**
+Lightweight all-JavaScript stack · Zero cost · Built for vibe coding in Claude Code + VS Code
+
+---
+
+## The One Rule That Matters Most
+
+> Build ONE small piece → run it → confirm it works → only then build the next piece.
+
+Never build two features at once. This single habit is what separates a finished
+prototype from an unfixable mess. Every phase below is one small, testable piece.
+
+---
+
+## The Stack (all free, one language)
+
+| Layer          | Tech                              | Why |
+| -------------- | --------------------------------- | --- |
+| Backend brain  | Node.js + TypeScript              | Your language; runs the simulation, healing, prediction |
+| Frontend twin  | React + Vite + React Three Fiber  | Your superpower; the 3D visual hook |
+| Dashboard      | React + Recharts                  | Live metrics panel |
+| Real-time link | WebSocket (`ws`)                  | Streams node state to the browser |
+| State          | In-memory (plain objects)         | No database, no Docker, no Redis — deliberately |
+| AI (added late)| Lightweight anomaly detection JS  | Only after everything else is stable |
+
+**What we deliberately DROP from the original AETHER plan (and why):**
+PostgreSQL, Redis, Docker, Docker Compose, multi-service, Python. All free in dollars,
+but they cost you hours of setup pain and fight your beginner/vibe-coding constraint.
+A demo needs none of them. If your hackathon specifically rewards containers/databases,
+add them back AFTER the prototype works — never before.
+
+---
+
+## PHASE 0 — What NOT to Build
+
+Do not build (now or maybe ever for the prototype):
+
+- Real orbital mechanics / NASA-grade physics
+- Reinforcement learning
+- Real Kubernetes / real clusters
+- Databases, caches, containers
+- Large AI models or LLMs
+
+**Mistake to avoid:** trying to make the simulation scientifically realistic.
+Believable and abstract beats accurate. This is the #1 momentum killer.
+
+---
+
+## PHASE 1 — Setup + First Prototype
+
+### The prototype target (nothing more than this)
+
+> Backend simulates 6 nodes with health values, ticking every second, streaming over
+> WebSocket. React app shows a rotating 3D Earth with 6 satellites glowing green/yellow/red.
+
+No radiation, no healing, no AI yet. Just the living foundation.
+
+### Software to install (in this order)
+
+1. **Node.js (LTS version)** — from nodejs.org. Gives you `node` + `npm`.
+   - CAUTION: get **LTS**, not "Current." LTS is stable.
+2. **VS Code** — from code.visualstudio.com.
+3. **Claude Code inside VS Code** — install the extension, sign in with your subscription.
+4. A modern browser (Chrome/Firefox) — you have this.
+
+### Verify before anything else
+
+Open VS Code terminal (View → Terminal) and run:
+
+```
+node --version
+npm --version
+```
+
+Both must print a version number. If not: reinstall Node, then fully close and reopen
+the terminal (common trip-up: terminal opened before install can't see Node yet).
+
+### Recommended VS Code extensions
+
+| Extension   | Why |
+| ----------- | --- |
+| ESLint      | Catches JS/TS errors as you type |
+| Error Lens  | Shows errors inline, instantly |
+| Prettier    | Auto-formats code |
+| GitLens     | Track your changes |
+
+### First steps
+
+1. Make and open the project folder:
+   ```
+   mkdir aether
+   cd aether
+   code .
+   ```
+2. In Claude Code, give the scaffold prompt (see "First Claude Code Prompt" below).
+3. Run what it builds, open the localhost link, confirm you see the rotating Earth.
+4. Report back: works, or the exact error.
+
+### Best practices this phase
+
+- Initialise Git immediately (`git init`) and commit after every working step.
+  A working commit is a free undo button.
+- Keep a clean folder structure from day 1 (see Project Structure below).
+- Write a one-line README saying what AETHER is.
+
+### Mistakes to avoid this phase
+
+- Running commands in the wrong folder (your terminal should show `aether`). Use `pwd`/`ls` to check.
+- Building the backend and frontend logic at once. Get the Earth rendering FIRST, with dummy data.
+- Skipping the `node --version` check and wondering later why nothing runs.
+
+---
+
+## Project Structure (keep modules separate from day 1)
+
+```
+aether/
+├── server/                 # Node + TS backend (the brain)
+│   ├── src/
+│   │   ├── index.ts        # entry: starts server + WebSocket
+│   │   ├── simulator.ts    # generates node states
+│   │   ├── faults.ts       # injects failures (Phase 3)
+│   │   ├── monitor.ts      # tracks + stores metric history (Phase 4)
+│   │   ├── healing.ts      # rule-based recovery (Phase 5)
+│   │   ├── predictor.ts    # anomaly detection (Phase 7)
+│   │   └── types.ts        # shared Node type
+│   └── package.json
+│
+├── client/                 # React + R3F frontend (the twin)
+│   ├── src/
+│   │   ├── App.tsx
+│   │   ├── Scene.tsx       # 3D Earth + satellites
+│   │   ├── Dashboard.tsx   # metrics panel (Phase 6)
+│   │   └── useSocket.ts    # WebSocket hook
+│   └── package.json
+│
+└── README.md
+```
+
+**Important note:** never mix simulation, healing, prediction, and UI logic in one file.
+Separate modules = you can debug and explain each piece. Mixed logic = collapse later.
+
+---
+
+## PHASE 2 — The Core Simulator
+
+**Goal:** simulate fake orbital servers ticking over time.
+
+Each node has:
+
+```
+id, temperature, radiation, cpuUsage, memoryHealth, networkHealth, status, workload
+```
+
+Example node:
+
+```
+{ id: "node_1", temperature: 74, radiation: 0.32, cpuUsage: 56,
+  memoryHealth: 91, networkHealth: 88, status: "healthy", workload: 3 }
+```
+
+The simulator ticks every second, nudging values with small random drift, and
+broadcasts the whole fleet over WebSocket.
+
+- BEST PRACTICE: use simple random drift + rules, not a physics engine.
+- MISTAKE TO AVOID: realistic space physics. Kills momentum, adds nothing to the demo.
+- QUICK NOTE: the simulator is the heart of the project — the training AND testing
+  environment. Treat it like a product.
+
+---
+
+## PHASE 3 — Fault Injection
+
+**Goal:** artificially create problems so there's something to heal.
+
+| Fault           | Effect |
+| --------------- | --- |
+| Radiation spike | memoryHealth drops |
+| Overheating     | cpuUsage throttles |
+| Packet loss     | networkHealth drops |
+| Node crash      | status → failed |
+
+Rule example: `if radiation > 0.8 → memoryHealth -= 20`.
+
+- BEST PRACTICE: use probabilities and timed events, not hardcoded chaos.
+- QUICK NOTE: keep faults as their own module (`faults.ts`) so you can trigger them on demand.
+
+---
+
+## PHASE 4 — Monitoring + History
+
+**Goal:** track every node's metrics continuously AND store timestamped history.
+
+- HUGE MISTAKE TO AVOID: not storing history. Without a rolling history buffer there is
+  no anomaly detection and no prediction later. Keep the last N ticks per node in memory.
+- BEST PRACTICE: store `{ timestamp, ...metrics }` per node in a capped array (e.g. last 100 ticks).
+
+---
+
+## PHASE 5 — Self-Healing Engine (rule-based FIRST)
+
+**Goal:** recover automatically from failures — no AI yet.
+
+| Problem        | Action |
+| -------------- | --- |
+| Overheating    | reduce workload |
+| High radiation | migrate tasks off node |
+| Node failure   | restart / reset node |
+| Packet loss    | reroute traffic |
+
+Core logic: `if node.health < 40 → isolate node → migrate workload → attempt recovery`.
+
+- IMPORTANT PRINCIPLE: self-healing is RULE-BASED first. Deterministic logic is easy to
+  debug, validate, and explain. AI comes only after this is rock-solid.
+- MASSIVE MISTAKE TO AVOID: reaching for reinforcement learning here. You need a stable
+  environment and stable recovery rules before any learning is even meaningful.
+
+---
+
+## PHASE 6 — Dashboard (mission control, not landing page)
+
+**Goal:** live panel showing fleet health, radiation levels, failures, recovery events,
+workload migrations — alongside the 3D twin.
+
+- Tools: React + Recharts for metrics.
+- BEST PRACTICE: think "mission control." Visual clarity beats visual beauty.
+- CAUTION — Frontend rabbit hole: do NOT spend days polishing UI. The infrastructure
+  logic is the project. A clean, clear dashboard is enough.
+
+---
+
+## PHASE 7 — AI Failure Prediction (added LAST, kept simple)
+
+**Goal:** predict failures before they happen. First and ONLY AI feature for the prototype.
+
+- Not LLMs. Not generative AI. Use anomaly detection / predictive analytics.
+- Start with the simplest thing that works: a lightweight statistical anomaly score
+  (e.g. flag nodes whose recent metrics deviate sharply from their history). This is the
+  JS equivalent of the "Isolation Forest first" advice — explainable and light.
+- Output: a failure-probability score per node, shown in the twin + dashboard.
+- IMPORTANT NOTE: the model does NOT need high accuracy or big datasets. It needs
+  believable, useful, well-architected behavior. That's enough for a prototype.
+- BEST PRACTICE: feed it the history buffer from Phase 4. That's why Phase 4 mattered.
+
+---
+
+## PHASE 8+ — Advanced (ONLY after the MVP works)
+
+Solar-storm scenario mode, cascading failures, chaos-injector demo button, replay/time
+controls, explainable decisions ("node isolated because: thermal spike + predicted
+radiation instability"). These turn a "server monitor" into an "infrastructure
+intelligence simulator" — but every one waits until the core loop is solid.
+
+Defer indefinitely for the prototype: RL scheduler, distributed consensus (Raft/Paxos),
+real multi-service/Docker, real databases.
+
+---
+
+## The Best First Demo (your target demo script)
+
+```
+1. Fleet of nodes orbiting Earth, all green, dashboard live
+2. Trigger a radiation spike (button)
+3. A few nodes destabilize → turn yellow/red
+4. Predictor flags them as high-failure-risk
+5. Workloads migrate off the failing nodes
+6. Nodes recover → turn green again
+7. Dashboard shows the whole event live
+```
+
+If this works, your prototype is already impressive.
+
+---
+
+## Cross-Cutting Best Practices
+
+1. **Build iteratively.** Never design the whole system first. Small working features, tested continuously.
+2. **Make everything observable.** Log events, failures, healing actions, predictions. You'll rely on these logs constantly.
+3. **Use fake data from the start.** Don't wait for realistic datasets. Simulation-first is correct.
+4. **Modularize everything.** Each system its own file/module.
+5. **Avoid premature optimization.** No Rust rewrites, no concurrency tuning, no over-engineering. It kills prototypes.
+
+---
+
+## Critical Cautions
+
+1. **Scope explosion — your biggest risk.** For every feature ask: *"Does this help
+   autonomous infrastructure management?"* If no → skip it.
+2. **AI overengineering.** Use AI only where useful (prediction). Don't force it everywhere.
+3. **Simulation-complexity trap.** You're not building NASA sims. Keep it abstract.
+4. **Frontend rabbit hole.** Logic matters more than pixel-perfect UI.
+
+---
+
+## Priority Order (if time is tight)
+
+- **FIRST:** simulator → monitoring → rule-based healing
+- **SECOND:** dashboard → anomaly detection
+- **THIRD:** scenario modes → advanced orchestration
+
+---
+
+## First Claude Code Prompt (paste this once set up)
+
+> Set up an all-JavaScript monorepo called AETHER with two folders.
+>
+> `/server`: Node.js + TypeScript. A WebSocket server (`ws`) that simulates 6 server
+> nodes. Each node has id, temperature, radiation, cpuUsage, memoryHealth,
+> networkHealth, status, and workload. Every second, nudge each node's values with
+> small random drift, set status to "healthy" for now, and broadcast the full fleet
+> array as JSON over WebSocket.
+>
+> `/client`: React + Vite + TypeScript + React Three Fiber. Connect to the WebSocket,
+> render a rotating 3D Earth (a textured sphere), and render 6 satellites orbiting it —
+> one per node — each colored by health (green healthy, yellow degraded, red failed).
+>
+> Give me every file with its full path, the exact terminal commands to create the
+> projects and install dependencies, and clear instructions to run both. Keep it minimal
+> and modular — separate files for the simulator, the WebSocket, the 3D scene, and the
+> socket hook. Do not add databases, Docker, or extra features yet.
+
+After it runs and you see the Earth with 6 green satellites, you've completed Phase 1.
+Then move to Phase 3 (fault injection) as your next single step.
+
 # AETHER — Phase 4 to 8 Prompt Pack
 
 **How to use this file:** paste ONE phase prompt into Claude Code, run it, confirm the

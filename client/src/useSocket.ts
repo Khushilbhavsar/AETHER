@@ -10,7 +10,9 @@
 import { useEffect, useRef, useState } from "react";
 import { ClientCommand, FaultKind, FleetSnapshot, ScenarioKind } from "./types";
 
-const WS_URL = "ws://localhost:8080";
+// In production, point at the deployed backend via VITE_WS_URL (e.g.
+// wss://aether-server.onrender.com); locally it falls back to the dev server.
+const WS_URL = import.meta.env.VITE_WS_URL ?? "ws://localhost:8080";
 const RECONNECT_DELAY_MS = 1500;
 
 export function useSocket() {
