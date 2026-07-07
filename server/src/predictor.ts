@@ -1,3 +1,21 @@
+/**
+ * predictor.ts — the foresight. Explainable statistical failure prediction.
+ *
+ * Deliberately NOT a trained model: pure statistics over the history buffer
+ * from monitor.ts, so every score can be explained in one sentence. Two
+ * signals combine into a 0-1 risk score per node:
+ *
+ *   - adverse trends: radiation rising / health falling / temperature climbing
+ *     across the last TREND_WINDOW ticks (recent-half vs earlier-half average)
+ *   - anomaly: latest value deviating sharply (z-score) from the node's own
+ *     recent baseline, with a noise floor so ordinary drift doesn't register
+ *
+ * Absolute danger zones (radiation > 0.8 etc.) put a floor under the score,
+ * because a node already at the edge is high-risk even if it's been sitting
+ * there long enough for its variance to flatten. The healing engine reads the
+ * resulting level: HIGH triggers preemptive workload migration BEFORE failure.
+ */
+
 import { NodeState, HistoryPoint, RiskLevel } from "./types.js";
 import { getHistory } from "./monitor.js";
 

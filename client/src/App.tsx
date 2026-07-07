@@ -1,3 +1,11 @@
+/**
+ * App.tsx — the root layout: 3D twin on the left, mission control on the right.
+ *
+ * Pulls the live snapshot from useSocket, holds the one piece of pure-UI state
+ * (which node is selected), and fans data + command callbacks out to Scene and
+ * Dashboard.
+ */
+
 import { useState } from "react";
 import "./App.css";
 import { Scene } from "./Scene";

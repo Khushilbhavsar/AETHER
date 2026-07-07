@@ -1,3 +1,14 @@
+/**
+ * simulator.ts — the fleet's "physics".
+ *
+ * Owns the shape of a node at rest: creates the fleet, drifts each node's raw
+ * metrics a little every tick, and derives the composite `health` score and
+ * traffic-light `status` from those metrics. It knows nothing about faults,
+ * healing, or prediction — those modules push and pull on the same metrics,
+ * and this module's deriveStatus() is the single place that turns metrics
+ * into a verdict.
+ */
+
 import { NodeState } from "./types.js";
 
 const NODE_COUNT = 6;

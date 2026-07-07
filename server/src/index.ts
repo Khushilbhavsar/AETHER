@@ -1,11 +1,26 @@
+/**
+ * index.ts — the conductor. Owns the tick loop and the WebSocket server.
+ *
+ * Once per second it runs the sense -> think -> act cycle across the modules:
+ *
+ *   drift metrics (simulator) -> apply scenario/fault pressure -> derive
+ *   health/status -> record history (monitor) -> score risk (predictor) ->
+ *   heal (healing, acting on those fresh scores) -> derive again -> broadcast
+ *
+ * Order matters: healing must run after monitoring and prediction, or it
+ * would decide on stale data. Everything the client sees arrives as one
+ * FleetSnapshot per tick; everything the client can do arrives here as a
+ * small ClientCommand (trigger fault / start scenario / toggle heal / reset).
+ */
+
 import { WebSocketServer, WebSocket } from "ws";
 import { createFleet, tickNode, deriveStatus } from "./simulator.js";
-import { progressFaults, maybeStartAmbientFault, triggerFault } from "./faults.js";
+import { progressFaults, maybeStartAmbientFault, triggerFault, makeEvent } from "./faults.js";
 import { recordTick, getBroadcastHistory, computeFleetStats } from "./monitor.js";
 import { applyHealing, setAutoHeal, isAutoHealEnabled } from "./healing.js";
 import { predictFailureRisk } from "./predictor.js";
 import { startScenario, progressScenario, getActiveScenario, resetFleet } from "./scenarios.js";
-import { ClientCommand, FleetEvent, FleetSnapshot } from "./types.js";
+import { ClientCommand, FleetEvent, FleetSnapshot, RiskLevel } from "./types.js";
 
 const PORT = 8080;
 const TICK_MS = 1000;
@@ -13,6 +28,9 @@ const EVENT_LOG_LIMIT = 50;
 
 const fleet = createFleet();
 let eventLog: FleetEvent[] = [];
+
+// Last known risk level per node, for detecting the low/medium -> high transition.
+const prevRiskLevels = new Map<string, RiskLevel>();
 
 function pushEvents(events: FleetEvent[]): void {
   if (events.length === 0) return;
@@ -42,6 +60,16 @@ function tick(): void {
     node.failureRisk = prediction.score;
     node.riskLevel = prediction.level;
     node.riskReason = prediction.reason;
+
+    // Log the moment a node ENTERS high risk (not every tick it stays there),
+    // with the predictor's explanation — foresight the operator can read.
+    const previous = prevRiskLevels.get(node.id) ?? "low";
+    if (prediction.level === "high" && previous !== "high" && prediction.reason !== "node has failed") {
+      pushEvents([
+        makeEvent("prediction", `${node.id} flagged HIGH RISK because: ${prediction.reason}`, node.id),
+      ]);
+    }
+    prevRiskLevels.set(node.id, prediction.level);
   }
 
   pushEvents(applyHealing(fleet));

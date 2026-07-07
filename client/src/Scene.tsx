@@ -1,3 +1,14 @@
+/**
+ * Scene.tsx — the digital twin. The 3D view of the fleet.
+ *
+ * A procedurally-textured Earth rotates at the center while one satellite per
+ * node orbits it on a slightly different radius/tilt/speed. Visual encoding:
+ * sphere color = status (green/yellow/red), dimmed = isolated by healing,
+ * pulsing orange ring = predicted HIGH risk (visible BEFORE the node fails),
+ * white ring = the node selected in the dashboard table. Purely presentational
+ * — all state arrives via props from the snapshot.
+ */
+
 import { useMemo, useRef } from "react";
 import { Canvas, extend, useFrame, useThree } from "@react-three/fiber";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";

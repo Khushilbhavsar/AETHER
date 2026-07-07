@@ -1,3 +1,15 @@
+/**
+ * faults.ts — the hostile environment.
+ *
+ * Creates the problems the rest of AETHER exists to solve. Faults are
+ * per-node and ramp in over several ticks (a radiation spike builds, a crash
+ * hits in two hard ticks) so a node visibly degrades rather than teleporting
+ * to broken. Faults start two ways: a small ambient probability each tick
+ * (space is hostile on its own) or an explicit trigger from the client's
+ * demo buttons. Also owns the event-record factory (makeEvent) used by every
+ * module that logs to the client.
+ */
+
 import { NodeState, FleetEvent, FaultKind } from "./types.js";
 
 let eventCounter = 0;

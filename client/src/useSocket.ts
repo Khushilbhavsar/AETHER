@@ -1,3 +1,12 @@
+/**
+ * useSocket.ts — the client's one connection to the backend.
+ *
+ * Opens the WebSocket, parses each per-tick FleetSnapshot into React state,
+ * auto-reconnects if the link drops, and exposes typed command senders
+ * (trigger fault, start scenario, toggle auto-heal, reset fleet). Every other
+ * component gets its data and its ability to act from this hook.
+ */
+
 import { useEffect, useRef, useState } from "react";
 import { ClientCommand, FaultKind, FleetSnapshot, ScenarioKind } from "./types";
 

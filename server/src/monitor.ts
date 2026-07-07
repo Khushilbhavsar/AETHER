@@ -1,3 +1,14 @@
+/**
+ * monitor.ts — the senses.
+ *
+ * Records a timestamped snapshot of every node each tick into a rolling
+ * per-node buffer (capped at 100 so memory stays bounded). This history is
+ * what makes prediction possible: the predictor reads trends out of it, and
+ * a trimmed copy ships to the client every tick so the dashboard chart
+ * survives a page refresh. Also computes the fleet-wide stats shown in the
+ * dashboard's stat tiles.
+ */
+
 import { NodeState, HistoryPoint, FleetStats } from "./types.js";
 
 const HISTORY_LIMIT = 100;

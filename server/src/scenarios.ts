@@ -1,3 +1,16 @@
+/**
+ * scenarios.ts — the demo climax. Scripted fleet-wide chaos.
+ *
+ * Where faults.ts injects trouble on one node, scenarios stress the whole
+ * fleet at once: a solar storm surges radiation everywhere, thermal overload
+ * bakes several nodes, network collapse degrades every link, and cascading
+ * failure hard-kills the busiest node so its migrated workload overloads the
+ * neighbors (overload -> heat, see simulator.ts). Each scenario runs a fixed
+ * number of ticks then subsides — recovery must be visible, or the demo only
+ * shows collapse. resetFleet() is the clean-restart button: baseline nodes,
+ * cleared faults/history, and auto-heal switched back ON.
+ */
+
 import { NodeState, FleetEvent, ScenarioKind } from "./types.js";
 import { makeEvent, clearFaults } from "./faults.js";
 import { baselineNode } from "./simulator.js";

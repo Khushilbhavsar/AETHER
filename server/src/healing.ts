@@ -1,3 +1,22 @@
+/**
+ * healing.ts — the hands. Rule-based self-recovery, no AI, no human.
+ *
+ * Runs every tick AFTER monitoring and prediction, so decisions use fresh
+ * health scores and risk levels. The rules, in priority order per node:
+ *
+ *   1. isolated?            -> keep repairing it; rejoin rotation above health 66
+ *   2. health < 33?         -> isolate + migrate its workload away
+ *   3. predicted HIGH risk? -> preemptively drain its workload (prediction feeds
+ *                              healing — this is what avoids failures entirely)
+ *   4. acute metric rules   -> cool down / migrate off radiation / reroute / shed load
+ *   5. nothing acute        -> passive drift back toward baseline
+ *
+ * Every action is logged with a human-readable "because: …" reason so an
+ * operator (or judge) can always see WHY the system acted. The whole engine
+ * sits behind the auto-heal switch: off means the fleet is on its own — the
+ * demo contrast that shows what AETHER is worth.
+ */
+
 import { NodeState, FleetEvent } from "./types.js";
 import { makeEvent } from "./faults.js";
 
@@ -7,6 +26,7 @@ const MAX_WORKLOAD = 10;
 
 let autoHeal = true;
 
+/** Flips the auto-heal master switch; returns the log event for the change. */
 export function setAutoHeal(enabled: boolean): FleetEvent[] {
   if (autoHeal === enabled) return [];
   autoHeal = enabled;
@@ -25,6 +45,17 @@ function logIfChanged(nodeId: string, action: string, message: string, events: F
   if (lastAction.get(nodeId) === action) return;
   lastAction.set(nodeId, action);
   events.push(makeEvent("heal", message, nodeId));
+}
+
+/**
+ * Combines the predictor's trend explanation with a threshold fact into one
+ * "because:" clause, e.g. "radiation trending up over last 8 ticks; health 28
+ * fell below 33". Skips predictor filler like "metrics stable".
+ */
+function becauseWithTrend(node: NodeState, thresholdFact: string): string {
+  const filler = ["metrics stable", "collecting baseline data", "node has failed"];
+  const trend = filler.includes(node.riskReason) ? "" : `${node.riskReason}; `;
+  return `because: ${trend}${thresholdFact}`;
 }
 
 /**
@@ -50,6 +81,7 @@ function migrateWorkload(fleet: NodeState[], from: NodeState): string[] {
   return receivers;
 }
 
+/** One healing pass over the fleet; returns the actions taken as log events. */
 export function applyHealing(fleet: NodeState[]): FleetEvent[] {
   if (!autoHeal) return []; // healing off: the fleet degrades with no one to save it
 
@@ -70,7 +102,11 @@ export function applyHealing(fleet: NodeState[]): FleetEvent[] {
         node.workload = 2; // eases back into rotation with a light load
         lastAction.delete(node.id);
         events.push(
-          makeEvent("heal", `${node.id} recovered (health ${node.health.toFixed(0)}) → back in rotation`, node.id)
+          makeEvent(
+            "heal",
+            `${node.id} back in rotation because: health ${node.health.toFixed(0)} climbed above ${RECOVER_HEALTH} while isolated`,
+            node.id
+          )
         );
       }
       continue;
@@ -90,7 +126,7 @@ export function applyHealing(fleet: NodeState[]): FleetEvent[] {
       events.push(
         makeEvent(
           "heal",
-          `${node.id} isolated (health ${node.health.toFixed(0)})${migrationNote} → recovering`,
+          `${node.id} isolated ${becauseWithTrend(node, `health ${node.health.toFixed(0)} fell below ${FAIL_HEALTH}`)}${migrationNote} → recovering`,
           node.id
         )
       );
@@ -105,7 +141,7 @@ export function applyHealing(fleet: NodeState[]): FleetEvent[] {
         logIfChanged(
           node.id,
           "preemptive",
-          `Preemptive migration off ${node.id} (predicted failure: ${node.riskReason}) → ${receivers.join(", ")}`,
+          `Preemptive migration off ${node.id} because: predicted failure — ${node.riskReason} → ${receivers.join(", ")}`,
           events
         );
         continue;
@@ -114,28 +150,52 @@ export function applyHealing(fleet: NodeState[]): FleetEvent[] {
 
     if (node.temperature > 100) {
       // Overheating: reduce workload to cut heat generation.
+      const tempAtAction = node.temperature;
       node.workload = Math.max(0, node.workload - 1);
       node.temperature -= 4;
-      logIfChanged(node.id, "cooling", `Reducing workload on ${node.id} to cool down`, events);
+      logIfChanged(
+        node.id,
+        "cooling",
+        `Reducing workload on ${node.id} because: temperature ${tempAtAction.toFixed(0)}° above 100° limit`,
+        events
+      );
     } else if (node.radiation > 0.8) {
       // High radiation: migrate tasks off node preemptively.
+      const radAtAction = node.radiation;
       if (node.workload > 0) migrateWorkload(fleet, node);
       node.radiation -= 0.08;
-      logIfChanged(node.id, "migrating", `Migrating workload off ${node.id} (radiation)`, events);
+      logIfChanged(
+        node.id,
+        "migrating",
+        `Migrating workload off ${node.id} because: radiation ${radAtAction.toFixed(2)} above 0.80 threshold`,
+        events
+      );
     } else if (node.networkHealth < 40) {
       // Packet loss: reroute traffic, let network recover.
+      const netAtAction = node.networkHealth;
       node.networkHealth = Math.min(100, node.networkHealth + 6);
-      logIfChanged(node.id, "rerouting", `Rerouting traffic around ${node.id}`, events);
+      logIfChanged(
+        node.id,
+        "rerouting",
+        `Rerouting traffic around ${node.id} because: network health ${netAtAction.toFixed(0)}% below 40%`,
+        events
+      );
     } else if (node.memoryHealth < 40) {
       // Degraded memory: shed load while it recovers.
+      const memAtAction = node.memoryHealth;
       node.workload = Math.max(0, node.workload - 1);
       node.memoryHealth = Math.min(100, node.memoryHealth + 5);
-      logIfChanged(node.id, "mem-recovery", `Shedding load on ${node.id} to recover memory`, events);
+      logIfChanged(
+        node.id,
+        "mem-recovery",
+        `Shedding load on ${node.id} because: memory health ${memAtAction.toFixed(0)}% below 40%`,
+        events
+      );
     } else {
       // Nothing acute — passive recovery back toward baseline.
       if (lastAction.has(node.id)) {
         lastAction.delete(node.id);
-        events.push(makeEvent("heal", `${node.id} stabilized`, node.id));
+        events.push(makeEvent("heal", `${node.id} stabilized — all metrics back inside safe limits`, node.id));
       }
       if (node.temperature > 70) node.temperature -= 1;
       if (node.memoryHealth < 90) node.memoryHealth += 1;

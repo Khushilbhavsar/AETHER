@@ -1,3 +1,11 @@
+/**
+ * types.ts — client-side mirror of server/src/types.ts.
+ *
+ * The wire contract: one FleetSnapshot arrives per tick over the WebSocket;
+ * user actions go back as small ClientCommand messages. Keep this file in
+ * lockstep with the server's copy when either side changes.
+ */
+
 export type NodeStatus = "healthy" | "degraded" | "failed";
 
 export type FaultKind = "radiationSpike" | "overheating" | "packetLoss" | "crash";

@@ -1,3 +1,12 @@
+/**
+ * types.ts — the shared vocabulary of the whole system.
+ *
+ * Every module (simulator, faults, monitor, predictor, healing, scenarios) and
+ * the client speak in these shapes. The server broadcasts one FleetSnapshot per
+ * tick over WebSocket; the client sends back small ClientCommand messages.
+ * The client keeps a mirrored copy of these types in client/src/types.ts.
+ */
+
 export type NodeStatus = "healthy" | "degraded" | "failed";
 
 export type FaultKind = "radiationSpike" | "overheating" | "packetLoss" | "crash";

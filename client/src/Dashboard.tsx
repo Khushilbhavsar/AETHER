@@ -1,3 +1,16 @@
+/**
+ * Dashboard.tsx — mission control. The read-and-command surface beside the 3D twin.
+ *
+ * Renders everything the operator needs each tick: fleet stat tiles, the
+ * auto-heal switch, scenario/fault trigger buttons, a per-node table
+ * (click a row to inspect a node — highlights it here and in the 3D view),
+ * visible "because:" explanations for every high-risk node, a fleet
+ * health/risk trend chart (seeded from broadcast history so it survives
+ * refresh), and the scrolling event log of faults, healing actions, and
+ * predictions. Pure consumer: reads the snapshot, sends commands, holds no
+ * simulation logic.
+ */
+
 import { useEffect, useRef, useState } from "react";
 import {
   ResponsiveContainer,
@@ -259,8 +272,17 @@ export function Dashboard({
             ))}
           </tbody>
         </table>
-        {selected && (
-          <p className="risk-reason">
+        {/* Every current high-risk node shows its explanation without needing a click. */}
+        {nodes
+          .filter((n) => n.riskLevel === "high" && n.status !== "failed")
+          .map((n) => (
+            <p key={n.id} className="risk-reason">
+              ⚠ <strong>{n.id}</strong> — high risk because: {n.riskReason}
+            </p>
+          ))}
+        {/* Any other node's reason is available by selecting its row. */}
+        {selected && !(selected.riskLevel === "high" && selected.status !== "failed") && (
+          <p className="risk-reason risk-reason-selected">
             <strong>{selected.id}</strong> — {selected.riskLevel} risk: {selected.riskReason}
           </p>
         )}
